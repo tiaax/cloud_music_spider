@@ -1,5 +1,6 @@
 # cloud_music_lrc_spider
 一键下载翻译歌词
+
 1.安装python3.x
 	切记勾选 Add Python 3.x to PATH
   
