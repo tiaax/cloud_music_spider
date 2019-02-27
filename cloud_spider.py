@@ -84,6 +84,7 @@ class CloudSpider:
 
     @staticmethod
     def get_song_id(message):
+        time.sleep(0.1)
         global search_url,header
         raw_data = 's={}&limit=10&type=1&offset=0'.format(message).encode('utf-8')
         try:
@@ -104,52 +105,52 @@ class CloudSpider:
             return
 
     @staticmethod
-    def get_lrc(song_id):
-        global header
-        if not song_id:
-            return
-        song_lrc_url = 'http://music.163.com/api/song/lyric?id={}&lv=1&kv=1&tv=-1'.format(song_id)
-        r = requests.get(song_lrc_url, headers=header)
-        try:
-            dicta = json.loads(r.text)
-        except json.decoder.JSONDecodeError:
-            return
-        if 'lrc' in dicta.keys():
-            lyrics = dicta['lrc']['lyric'].split('\n')
-            if 'lyric' in dicta['tlyric'].keys():
-                if not dicta['tlyric']['lyric']:
-                    return lyrics
-                translation = dicta['tlyric']['lyric'].split('\n')
-                list_lrc = []   # cn_jp_merge
-                for j in lyrics:
-                    for k in translation:
-                        if j.split(']')[0] == k.split(']')[0]:
-                            list_lrc.append(j + '_' + ''.join(k.split(']')[1:]))
-                            continue
-            else:
-                list_lrc = lyrics
-            return list_lrc
-
-
+    def get_lrc(song_id,song_title):
+        if not os.path.exists('{}\\lrc\\{}.lrc'.format(path, song_title)):
+            global header
+            if not song_id:
+                return
+            song_lrc_url = 'http://music.163.com/api/song/lyric?id={}&lv=1&kv=1&tv=-1'.format(song_id)
+            r = requests.get(song_lrc_url, headers=header)
+            try:
+                dicta = json.loads(r.text)
+            except json.decoder.JSONDecodeError:
+                return
+            if 'lrc' in dicta.keys():
+                lyrics = dicta['lrc']['lyric'].split('\n')
+                if 'lyric' in dicta['tlyric'].keys():
+                    if not dicta['tlyric']['lyric']:
+                        return lyrics
+                    translation = dicta['tlyric']['lyric'].split('\n')
+                    list_lrc = []   # cn_jp_merge
+                    for j in lyrics:
+                        for k in translation:
+                            if j.split(']')[0] == k.split(']')[0]:
+                                list_lrc.append(j + '_' + ''.join(k.split(']')[1:]))
+                                continue
+                else:
+                    list_lrc = lyrics
+                return list_lrc
 
     @staticmethod
-    def get_album_image(song_id):
-        if not song_id:
-            return
-        search_album_image_url = 'https://music.163.com/song?id={}'.format(song_id)
-        try:
-            r = requests.get(search_album_image_url,headers=header)
-        except requests.exceptions.SSLError:
-            return
+    def get_album_image(song_id,album_name=''):
+        if not os.path.exists('{}\\image\\{}.jpg'.format(path, album_name)):
+            if not song_id:
+                return
+            search_album_image_url = 'https://music.163.com/song?id={}'.format(song_id)
+            try:
+                r = requests.get(search_album_image_url,headers=header)
+            except requests.exceptions.SSLError:
+                return
 
-        try:
-            album_name = re.findall(re.compile('''<meta name="keywords" content="(.*?)" />'''),r.text)[0].split('，')[1]
-            album_image_url = re.findall(re.compile('''<meta property="og:image" content="(.*?)" />'''),r.text)[0]
-        except IndexError:
-            return
+            try:
+                album_name = re.findall(re.compile('''<meta name="keywords" content="(.*?)" />'''),r.text)[0].split('，')[1]
+                album_image_url = re.findall(re.compile('''<meta property="og:image" content="(.*?)" />'''),r.text)[0]
+            except IndexError:
+                return
 
-        image = requests.get(album_image_url, headers=header)
-        return image.content,album_name
+            image = requests.get(album_image_url, headers=header)
+            return image.content,album_name
 
     def read_local_song_files(self):
         print('正在读取本地文件...')
@@ -158,11 +159,9 @@ class CloudSpider:
             current_path, dir_in_path, file_list = i
             for file in file_list:
                 song_path = current_path + '\\' + file
-
                 splits = file.split('.')
                 song_title = ''.join(splits[:-1])
                 song_type = splits[-1]
-
                 song_type_list = ['flac', 'mp3', 'm4a', 'wav', 'dff', 'dsf']
                 if song_type not in song_type_list:
                     continue
@@ -173,20 +172,28 @@ class CloudSpider:
 
     def create_message_dict(self):
         for _, message in enumerate(self.message_list):
+            try:
+                message_list = message.split(',')
+                album_name = message_list[2]
+                if (os.path.exists('{}\\lrc\\{}.lrc'.format(path,self.song_title_list[_]))) and (os.path.exists('{}\\image\\{}.jpg'.format(path, album_name))):
+                    continue
+            except IndexError:
+                pass
+
             song_id = self.get_song_id(message)
             if song_id:
                 self.song_id_dict[self.song_title_list[_]] = song_id
         print('成功读取本地歌曲文件,共{}首歌曲'.format(len(self.song_title_list)))
 
+
     def download_lrc(self):
         print('正在下载歌词...')
         for j,k in tqdm(self.song_id_dict.items(),ascii=True):
-            if not os.path.exists('{}\\lrc\\{}.lrc'.format(path, j)):
-                lrc = self.get_lrc(k)
-                if lrc:
-                    lrc = sorted(lrc)
-                    with open('{}\\lrc\\{}.lrc'.format(path, j), 'w', encoding='utf-8') as f:
-                        f.write('\n'.join(lrc))
+            lrc = self.get_lrc(k,j)
+            if lrc:
+                lrc = sorted(lrc)
+                with open('{}\\lrc\\{}.lrc'.format(path, j), 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(lrc))
             time.sleep(0.1)
 
 
@@ -196,19 +203,21 @@ class CloudSpider:
             web_split = self.message_list[self.song_title_list.index(j)].split(',')
             if len(web_split)>2:
                 al_name = web_split[2]
-                if not os.path.exists('{}\\image\\{}.jpg'.format(path, al_name)):
-                    album_image = self.get_album_image(k)
-                    if album_image:
-                        album_image_file = '{}\\image\\{}.jpg'.format(path, al_name)
-                        if not os.path.exists(album_image_file):
+                album_image = self.get_album_image(k,al_name)
+                if album_image:
+                    album_image_file = '{}\\image\\{}.jpg'.format(path, al_name)
+                    if not os.path.exists(album_image_file):
+                        try:
+                            with open(album_image_file, 'wb') as f:
+                                f.write(album_image[0])
+                        except FileNotFoundError:
                             try:
-                                with open(album_image_file, 'wb') as f:
-                                    f.write(album_image[0])
-                            except FileNotFoundError:
                                 with open('{}\\image\\NoAlbum\\{}.jpg'.format(path, album_image[1]), 'wb') as f:
                                     f.write(album_image[0])
-                            except OSError:
+                            except FileNotFoundError:
                                 continue
+                        except OSError:
+                            continue
             else:
                 album_image = self.get_album_image(k)
                 if album_image:
@@ -217,8 +226,11 @@ class CloudSpider:
                         try:
                             with open(album_noimage_file, 'wb') as f:
                                 f.write(album_image[0])
+                        except FileNotFoundError:
+                            continue
                         except OSError:
                             continue
+
             time.sleep(0.1)
 
 
